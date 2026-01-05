@@ -1,5 +1,5 @@
 ## 1-5日 更新 
-`问题`：机器人落地垫脚，脚尖先触地，且落地后发生弹跳，使用修正高度后的数据`kongfan_version2_fix_height3`
+`问题`：机器人落地垫脚，脚尖相较于脚跟先触地，且落地后膝盖关节僵直，导致发生弹跳，训练使用修正高度后的数据`kongfan_version2_fix_height3`
 ## 训练命令：
 python scripts/rsl_rl/train.py \
     --task=Tracking-Flat-G1-Wo-State-Estimation-v0 \
