@@ -411,14 +411,24 @@ class RewardsCfg:
     )
     # [修改] 加大动作平滑惩罚 (抑制高频抖动)
     action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.25)  # 加大权重 (原 -0.1)
-    # [新增] 带阈值的脚部接触速度惩罚
+    # # [新增] 带阈值的脚部接触速度惩罚
+    # feet_stumble = RewTerm(
+    #     func=mdp.feet_contact_vel_error_with_threshold,
+    #     weight=-1.0,  # 强迫机器人"锁死"地面
+    #     params={
+    #         "command_name": "motion",
+    #         "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["left_ankle_roll_link", "right_ankle_roll_link"]),
+    #         "threshold": 0.1,  # 10cm/s 的死区，允许推力造成的轻微晃动
+    #     },
+    # )
     feet_stumble = RewTerm(
         func=mdp.feet_contact_vel_error_with_threshold,
-        weight=-1.0,  # 很强惩罚，强迫机器人"锁死"地面
+        weight=-1.0, 
         params={
             "command_name": "motion",
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["left_ankle_roll_link", "right_ankle_roll_link"]),
-            "threshold": 0.1,  # 10cm/s 的死区，允许推力造成的轻微晃动
+            # 允许微小滑动(如 0.1m/s)以适应推力，超过则重罚
+            "threshold": 0.1,  
         },
     )
 
@@ -447,10 +457,17 @@ class RewardsFlipCfg(RewardsCfg):
     # ------------------------核心追踪项 (Tracking)------------------------
     # [大幅降低] 全局位置权重（追踪锚点的xyz）
     # 空翻是弹道运动，空中无法修正位置。如果在空中因为位置偏差惩罚它，策略会试图用一种违反物理的方式"拽"回机器人，导致动作变形
-    motion_global_anchor_pos = RewTerm(
-        func=mdp.motion_global_anchor_position_error_exp,
-        weight=0.15,  # 0.5 -> 0.15
-        params={"command_name": "motion", "std": 0.5}, # 增大 std，允许更大的位置误差
+    # motion_global_anchor_pos = RewTerm(
+    #     func=mdp.motion_global_anchor_position_error_exp,
+    #     weight=0.15,  # 0.5 -> 0.15
+    #     params={"command_name": "motion", "std": 0.5}, # 增大 std，允许更大的位置误差
+    # )
+    # 禁用原来的混合追踪,不考虑z轴高度
+    motion_global_anchor_pos = None
+    motion_global_anchor_pos_xy = RewTerm(
+        func=mdp.motion_global_anchor_pos_xy_only_exp,
+        weight=0.5,  # 高权重希望落点精准
+        params={"command_name": "motion", "std": 0.5},
     )
     
     # [大幅增加] 全局姿态权重。
@@ -464,8 +481,8 @@ class RewardsFlipCfg(RewardsCfg):
     # [保留] 身体相对位置 (保持身体形状)
     motion_body_pos = RewTerm(
         func=mdp.motion_relative_body_position_error_exp,
-        weight=0.5,
-        params={"command_name": "motion", "std": 0.3},
+        weight=0.2,    # 放松身体姿态追踪,自由去屈膝
+        params={"command_name": "motion", "std": 0.5},
     )
 
     motion_body_lin_vel = RewTerm(
@@ -501,7 +518,7 @@ class RewardsFlipCfg(RewardsCfg):
             "command_name": "motion",
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["left_ankle_roll_link", "right_ankle_roll_link"]),
             "threshold": 0.05,
-            "phase_range": (0.66, 0.54),  # 起跳脚时间窗
+            "phase_range": (0.42, 0.54),  # 起跳脚时间窗
         },
     )
 
@@ -512,7 +529,7 @@ class RewardsFlipCfg(RewardsCfg):
         params={
             "command_name": "motion",
             "std": 0.15,
-            "min_height": 0.05,
+            "min_height": 0.8,  # 比站立时根节点稍高一些
             },
     )
 
@@ -542,15 +559,15 @@ class RewardsFlipCfg(RewardsCfg):
     # ------------------------ 落地与接触 (Contact) ------------------------
     # [替换] 使用新的基于参考动作的落地惩罚。
     # 只有当参考动作指示"必须落地"时，才严厉惩罚脚的滑动。在起跳和腾空阶段，允许脚有任何速度
-    feet_stumble = RewTerm(
-        func=mdp.feet_contact_vel_masked_by_ref,
-        weight=-0.5,
-        params={
-            "command_name": "motion",
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["left_ankle_roll_link", "right_ankle_roll_link"]),
-            "ref_contact_height_threshold": 0.08,  # 参考脚高小于 8cm 视为接地
-        },
-    )
+    # feet_stumble = RewTerm(
+    #     func=mdp.feet_contact_vel_masked_by_ref,
+    #     weight=-0.5,
+    #     params={
+    #         "command_name": "motion",
+    #         "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["left_ankle_roll_link", "right_ankle_roll_link"]),
+    #         "ref_contact_height_threshold": 0.08,  # 参考脚高小于 8cm 视为接地
+    #     },
+    # )
 
     # 落地瞬间抑制过大的下落速度
     landing_impact = RewTerm(

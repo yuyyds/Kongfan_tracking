@@ -113,28 +113,63 @@ def feet_contact_time(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg, thresh
 
 #########################################################################################
 # 带阈值的足部接触速度惩罚
+# def feet_contact_vel_error_with_threshold(
+#     env: ManagerBasedRLEnv, command_name: str, sensor_cfg: SceneEntityCfg, threshold: float = 0.1
+# ) -> torch.Tensor:
+#     # 1. 获取机器人对象
+#     robot: Articulation = env.scene["robot"]
+    
+#     body_ids, _ = robot.find_bodies(sensor_cfg.body_names)
+
+#     contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    
+#     # 检查这些特定部位是否接触 (力 > 1.0N)
+#     is_contact = contact_sensor.data.net_forces_w_history[:, 0, body_ids, 2] > 1.0
+    
+#     # 3. 获取足部在世界坐标系下的线速度 (XY平面)
+#     foot_vel_xy = robot.data.body_lin_vel_w[:, body_ids, :2]
+    
+#     vel_norm = torch.norm(foot_vel_xy, dim=-1)  # 计算速度模长
+    
+#     vel_error = torch.clamp(vel_norm - threshold, min=0.0)  # 应用死区阈值
+    
+#     reward = is_contact.float() * torch.square(vel_error)   # 计算奖励
+    
+#     return torch.sum(reward, dim=-1)
 def feet_contact_vel_error_with_threshold(
     env: ManagerBasedRLEnv, command_name: str, sensor_cfg: SceneEntityCfg, threshold: float = 0.1
 ) -> torch.Tensor:
     # 1. 获取机器人对象
     robot: Articulation = env.scene["robot"]
-    
-    body_ids, _ = robot.find_bodies(sensor_cfg.body_names)
-
     contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
     
-    # 检查这些特定部位是否接触 (力 > 1.0N)
-    is_contact = contact_sensor.data.net_forces_w_history[:, 0, body_ids, 2] > 1.0
+    # [优化] 直接从配置中读取预处理好的 body_ids，不要在 step 循环里 find_bodies
+    # 注意：在 config 中定义 body_names 时，Isaac Lab 会自动填充 body_ids
+    # 如果 sensor_cfg.body_ids 是 slice，则需要处理 (通常指所有刚体)
+    if isinstance(sensor_cfg.body_ids, slice):
+        body_ids = slice(None)
+    else:
+        body_ids = sensor_cfg.body_ids
     
-    # 3. 获取足部在世界坐标系下的线速度 (XY平面)
+    # 2. 检查接触状态 (Force > 1.0N)
+    # sensor 必须是覆盖全身的 (Robot/.*)，否则这里用 body_ids 索引会越界
+    # shape: [env, 1(history), num_bodies, 3(xyz)] -> 取 Z 轴力
+    net_contact_forces = contact_sensor.data.net_forces_w_history[:, 0, body_ids, 2]
+    is_contact = net_contact_forces > 1.0
+    
+    # 3. 获取足部线速度 (XY平面)
     foot_vel_xy = robot.data.body_lin_vel_w[:, body_ids, :2]
+    vel_norm = torch.norm(foot_vel_xy, dim=-1)
     
-    vel_norm = torch.norm(foot_vel_xy, dim=-1)  # 计算速度模长
+    # 4. 计算速度误差 (应用死区)
+    # 只有当速度超过 threshold (例如 0.1m/s) 时才开始计算误差
+    vel_error = torch.clamp(vel_norm - threshold, min=0.0)
     
-    vel_error = torch.clamp(vel_norm - threshold, min=0.0)  # 应用死区阈值
+    # 5. 组合奖励
+    # 逻辑：(接触中? 1 : 0) * (速度误差)^2
+    reward = is_contact.float() * torch.square(vel_error)
     
-    reward = is_contact.float() * torch.square(vel_error)   # 计算奖励
-    
+    # 对所有指定的脚求和 (左脚+右脚)
     return torch.sum(reward, dim=-1)
 
 # 动作加速度惩罚 (平滑二阶导数)
@@ -241,7 +276,7 @@ def takeoff_stance_foot_lock_precise(
     env: ManagerBasedRLEnv,
     command_name: str,
     sensor_cfg: SceneEntityCfg,
-    threshold: float = 0.05,
+    threshold: float = 0.05,    # 脚部水平速度阈值（m/s），小于这个速度不惩罚（允许微小滑动）
     phase_range: tuple[float, float] = (0.0, 0.3),  # 脚的时间窗
 ) -> torch.Tensor:
     """
