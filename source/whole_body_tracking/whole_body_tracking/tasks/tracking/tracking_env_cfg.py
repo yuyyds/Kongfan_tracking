@@ -457,18 +457,18 @@ class RewardsFlipCfg(RewardsCfg):
     # ------------------------核心追踪项 (Tracking)------------------------
     # [大幅降低] 全局位置权重（追踪锚点的xyz）
     # 空翻是弹道运动，空中无法修正位置。如果在空中因为位置偏差惩罚它，策略会试图用一种违反物理的方式"拽"回机器人，导致动作变形
-    # motion_global_anchor_pos = RewTerm(
-    #     func=mdp.motion_global_anchor_position_error_exp,
-    #     weight=0.15,  # 0.5 -> 0.15
-    #     params={"command_name": "motion", "std": 0.5}, # 增大 std，允许更大的位置误差
-    # )
-    # 禁用原来的混合追踪,不考虑z轴高度
-    motion_global_anchor_pos = None
-    motion_global_anchor_pos_xy = RewTerm(
-        func=mdp.motion_global_anchor_pos_xy_only_exp,
-        weight=0.5,  # 高权重希望落点精准
-        params={"command_name": "motion", "std": 0.5},
+    motion_global_anchor_pos = RewTerm(
+        func=mdp.motion_global_anchor_position_error_exp,
+        weight=0.2,  # 0.5 -> 0.15
+        params={"command_name": "motion", "std": 0.5}, # 增大 std，允许更大的位置误差
     )
+    # # 禁用原来的混合追踪,不考虑z轴高度（有问题，会翻过头）
+    # motion_global_anchor_pos = None
+    # motion_global_anchor_pos_xy = RewTerm(
+    #     func=mdp.motion_global_anchor_pos_xy_only_exp,
+    #     weight=0.5,  # 高权重希望落点精准
+    #     params={"command_name": "motion", "std": 0.5},
+    # )
     
     # [大幅增加] 全局姿态权重。
     # 空翻的核心是姿态控制，这部分必须严格
@@ -497,39 +497,39 @@ class RewardsFlipCfg(RewardsCfg):
         params={"command_name": "motion", "std": 3.14},
     )
     
-    # # [新增] 关键点形状强约束
-    # # 强制脚相对于躯干的位置正确，这对起跳和落地姿态至关重要
-    # motion_keypoint_shape = RewTerm(
-    #     func=mdp.motion_tracking_keypoint_shape_exp,
-    #     weight=0.5,  # 约束脚位置稳定
-    #     params={
-    #         "command_name": "motion", 
-    #         "std": 0.5,
-    #         # "body_names": ["left_ankle_roll_link", "right_ankle_roll_link", "left_wrist_yaw_link", "right_wrist_yaw_link"]
-    #         "body_names": ["left_ankle_roll_link", "right_ankle_roll_link"]
-    #     },
-    # )
-
-    # [新增] 起跳脚锁死，防止脚滑
-    takeoff_foot_lock = RewTerm(
-        func=mdp.takeoff_stance_foot_lock_precise,
-        weight=-1.5,
+    # [新增] 关键点形状强约束
+    # 强制脚相对于躯干的位置正确，这对起跳和落地姿态至关重要
+    motion_keypoint_shape = RewTerm(
+        func=mdp.motion_tracking_keypoint_shape_exp,
+        weight=1.0,  # 约束脚位置稳定
         params={
-            "command_name": "motion",
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["left_ankle_roll_link", "right_ankle_roll_link"]),
-            "threshold": 0.05,
-            "phase_range": (0.42, 0.54),  # 起跳脚时间窗
+            "command_name": "motion", 
+            "std": 0.5,
+            # "body_names": ["left_ankle_roll_link", "right_ankle_roll_link", "left_wrist_yaw_link", "right_wrist_yaw_link"]
+            "body_names": ["left_ankle_roll_link", "right_ankle_roll_link"]
         },
     )
+
+    # # [新增] 起跳脚锁死，防止脚滑
+    # takeoff_foot_lock = RewTerm(
+    #     func=mdp.takeoff_stance_foot_lock_precise,
+    #     weight=-1.5,
+    #     params={
+    #         "command_name": "motion",
+    #         "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["left_ankle_roll_link", "right_ankle_roll_link"]),
+    #         "threshold": 0.05,
+    #         "phase_range": (0.43, 0.54),  # 起跳脚时间窗
+    #     },
+    # )
 
     # 奖励机器人在空中达到足够的腾空高度
     base_height = RewTerm(
         func=mdp.base_height_tracking_exp,
-        weight=1.0,
+        weight=0.5,
         params={
             "command_name": "motion",
             "std": 0.15,
-            "min_height": 0.8,  # 比站立时根节点稍高一些
+            "min_height": 0.78,
             },
     )
 
@@ -583,7 +583,7 @@ class RewardsFlipCfg(RewardsCfg):
     # 强力纠正落地脚姿态
     feet_flat_ground = RewTerm(
         func=mdp.feet_flat_ground_orientation_exp,
-        weight=1.5, # 给高权重，这直接决定能否站稳
+        weight=1.0, # 给高权重，这直接决定能否站稳
         params={
             "command_name": "motion",
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["left_ankle_roll_link", "right_ankle_roll_link"]),
