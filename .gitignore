@@ -1,0 +1,7 @@
+# 日志目录
+wandb/
+logs/
+
+# 训练模型目录
+models/
+*.pt
