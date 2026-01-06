@@ -143,9 +143,6 @@ def feet_contact_vel_error_with_threshold(
     robot: Articulation = env.scene["robot"]
     contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
     
-    # [优化] 直接从配置中读取预处理好的 body_ids，不要在 step 循环里 find_bodies
-    # 注意：在 config 中定义 body_names 时，Isaac Lab 会自动填充 body_ids
-    # 如果 sensor_cfg.body_ids 是 slice，则需要处理 (通常指所有刚体)
     if isinstance(sensor_cfg.body_ids, slice):
         body_ids = slice(None)
     else:

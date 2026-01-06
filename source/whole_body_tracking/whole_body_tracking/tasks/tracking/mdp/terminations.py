@@ -15,11 +15,13 @@ from whole_body_tracking.tasks.tracking.mdp.commands import MotionCommand
 from whole_body_tracking.tasks.tracking.mdp.rewards import _get_body_indexes
 
 
+# 检测锚点位置是否超出阈值
 def bad_anchor_pos(env: ManagerBasedRLEnv, command_name: str, threshold: float) -> torch.Tensor:
     command: MotionCommand = env.command_manager.get_term(command_name)
     return torch.norm(command.anchor_pos_w - command.robot_anchor_pos_w, dim=1) > threshold
 
 
+# 检查Z轴方向位置差异
 def bad_anchor_pos_z_only(env: ManagerBasedRLEnv, command_name: str, threshold: float) -> torch.Tensor:
     command: MotionCommand = env.command_manager.get_term(command_name)
     return torch.abs(command.anchor_pos_w[:, -1] - command.robot_anchor_pos_w[:, -1]) > threshold
@@ -37,6 +39,7 @@ def bad_anchor_pos_z_only(env: ManagerBasedRLEnv, command_name: str, threshold: 
 
 #     return (motion_projected_gravity_b[:, 2] - robot_projected_gravity_b[:, 2]).abs() > threshold
 
+# 检测锚点方向是否超出阈值
 def bad_anchor_ori(
     env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, command_name: str, threshold: float
 ) -> torch.Tensor:
@@ -52,6 +55,7 @@ def bad_anchor_ori(
     return (motion_projected_gravity_b[:, 2] - robot_projected_gravity_b[:, 2]).abs() > threshold
 
 
+# 检测身体部位位置是否超出阈值
 def bad_motion_body_pos(
     env: ManagerBasedRLEnv, command_name: str, threshold: float, body_names: list[str] | None = None
 ) -> torch.Tensor:
@@ -62,6 +66,7 @@ def bad_motion_body_pos(
     return torch.any(error > threshold, dim=-1)
 
 
+# 检查Z轴方向身体位置差异
 def bad_motion_body_pos_z_only(
     env: ManagerBasedRLEnv, command_name: str, threshold: float, body_names: list[str] | None = None
 ) -> torch.Tensor:
