@@ -351,6 +351,51 @@ def landing_impact_penalty(
 
     return penalty * landing_mask.float()
 
+# 落地冲击力峰值惩罚 (Shock Force)
+def landing_shock_force_penalty(
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    sensor_cfg: SceneEntityCfg,
+    threshold_multiplier: float = 2.0, # 阈值倍数：允许承受 2.0 倍体重的力
+):
+    """
+    惩罚超过安全阈值的地面反作用力峰值。
+    区分“硬砸”和“软着陆”的关键：
+    - 软着陆：力均匀分布，不超过 2.0mg
+    - 硬砸：力出现尖峰，瞬间达到 5.0mg -> 受到重罚
+    """
+    robot: Articulation = env.scene["robot"]
+    command: MotionCommand = env.command_manager.get_term(command_name)
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+
+    masses = robot.root_physx_view.get_masses()
+    total_mass = masses.sum(dim=1).to(env.device)
+    gravity = 9.81
+    weight = total_mass * gravity # [Env] 
+
+    # 2. 获取脚部接触力
+    # sensor shape: [env, history, body, 3] -> 取 Z 轴
+    body_ids, _ = robot.find_bodies(sensor_cfg.body_names)
+    foot_forces_z = contact_sensor.data.net_forces_w_history[:, 0, body_ids, 2]
+    
+    # 对双脚的力求和 (总的地反力 GRF)
+    total_ground_reaction_force = torch.sum(foot_forces_z, dim=-1)
+
+    # 设定动态阈值 (例如 2.0 倍体重)
+    safe_force_limit = weight * threshold_multiplier
+
+    # 计算惩罚 (只惩罚超出的部分)
+    excess_force = torch.clamp(total_ground_reaction_force - safe_force_limit, min=0.0)
+    
+    # 归一化一下，防止数值爆炸 (除以体重，变成“过载倍数”的平方)
+    penalty_normalized = torch.square(excess_force / weight)
+
+    # 5. 相位掩码 (动作后半段生效)
+    phase = command.time_steps.float() / float(command.motion.time_step_total)
+    landing_mask = phase > 0.60
+
+    return penalty_normalized * landing_mask.float()
+
 def feet_air_time(
     env: ManagerBasedRLEnv, command_name: str, sensor_cfg: SceneEntityCfg, threshold: float
 ) -> torch.Tensor:

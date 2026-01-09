@@ -558,13 +558,23 @@ class RewardsFlipCfg(RewardsCfg):
     #     },
     # )
 
-    # 落地瞬间抑制过大的下落速度
-    landing_impact = RewTerm(
-        func=mdp.landing_impact_penalty,
-        weight=-1.5,
+    # # 落地瞬间抑制过大的下落速度
+    # landing_impact = RewTerm(
+    #     func=mdp.landing_impact_penalty,
+    #     weight=-1.5,
+    #     params={
+    #         "command_name": "motion",
+    #         "vel_threshold": -1.5,
+    #     },
+    # )
+    # [替换] 落地冲击 -> 改为力峰值惩罚
+    landing_shock = RewTerm(
+        func=mdp.landing_shock_force_penalty,
+        weight=-0.5, # 权重不需要太大，因为它是平方项且数值可能较大
         params={
             "command_name": "motion",
-            "vel_threshold": -1.5,
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["left_ankle_roll_link", "right_ankle_roll_link"]),
+            "threshold_multiplier": 2.0, # 允许瞬间承受 2 倍体重的冲击，超过就开始罚
         },
     )
 
@@ -572,7 +582,7 @@ class RewardsFlipCfg(RewardsCfg):
     # 强力纠正落地脚姿态
     feet_flat_ground = RewTerm(
         func=mdp.feet_flat_ground_orientation_exp,
-        weight=1.0, # 给高权重，这直接决定能否站稳
+        weight=1.5, # 给高权重，这直接决定能否站稳
         params={
             "command_name": "motion",
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["left_ankle_roll_link", "right_ankle_roll_link"]),
